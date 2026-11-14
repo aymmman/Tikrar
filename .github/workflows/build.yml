@@ -31,10 +31,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
-
       - name: SDK packages
-        run: sdkmanager "platforms;android-37" "build-tools;36.0.0" || true
+        run: |
+          SDKM=$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' | sort -V | tail -n1)
+          echo "Using $SDKM"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-37" "build-tools;36.0.0" || true
+          echo "sdk.dir=$ANDROID_HOME" > "$PROJECT_DIR/local.properties"
 
       - uses: gradle/actions/setup-gradle@v5
         with:
