@@ -13,17 +13,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Unpack project
         run: |
           rm -rf src && mkdir src
-          if [ -f Tikrar.zip ]; then
-            unzip -q Tikrar.zip -d src
+          # Use the most recently committed ZIP, whatever its name is.
+          ZIP=""
+          NEWEST=0
+          while IFS= read -r -d '' f; do
+            T=$(git log -1 --format=%ct -- "$f" 2>/dev/null || echo 0)
+            if [ "${T:-0}" -ge "$NEWEST" ]; then NEWEST=${T:-0}; ZIP="$f"; fi
+          done < <(find . -maxdepth 2 -iname '*.zip' -not -path './src/*' -print0)
+          if [ -n "$ZIP" ]; then
+            echo "Using $ZIP"
+            unzip -q -o "$ZIP" -d src
           else
+            echo "No ZIP found, using repository files"
             rsync -a --exclude src --exclude .git ./ src/
           fi
-          SETTINGS=$(find src -name settings.gradle.kts -not -path '*/build/*' | head -n1)
-          if [ -z "$SETTINGS" ]; then echo "settings.gradle.kts not found"; exit 1; fi
+          SETTINGS=$(find src -name settings.gradle.kts -not -path '*/build/*' -not -path '*/__MACOSX/*' | head -n1)
+          if [ -z "$SETTINGS" ]; then
+            echo "settings.gradle.kts not found. Files in repo:"; ls -la
+            echo "Files after unzip:"; find src -maxdepth 3 | head -50
+            exit 1
+          fi
           echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@v5
