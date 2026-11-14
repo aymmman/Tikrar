@@ -1,0 +1,57 @@
+name: Build Tikrar
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Unpack project
+        run: |
+          rm -rf src && mkdir src
+          if [ -f Tikrar.zip ]; then
+            unzip -q Tikrar.zip -d src
+          else
+            rsync -a --exclude src --exclude .git ./ src/
+          fi
+          SETTINGS=$(find src -name settings.gradle.kts -not -path '*/build/*' | head -n1)
+          if [ -z "$SETTINGS" ]; then echo "settings.gradle.kts not found"; exit 1; fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: SDK packages
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0" || true
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.6.0"
+
+      - name: Build release APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleRelease --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp "$PROJECT_DIR"/app/build/outputs/apk/release/*.apk out/Tikrar-${{ github.run_number }}.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Tikrar build ${{ github.run_number }}
+          files: out/*.apk
